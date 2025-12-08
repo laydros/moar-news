@@ -1,0 +1,21 @@
+{% if refreshing %}
+<button
+    hx-get="/refresh/status"
+    hx-target="#refresh-container"
+    hx-swap="innerHTML"
+    hx-trigger="load delay:2s"
+    class="refresh-btn refreshing"
+    disabled
+>
+    Refreshing...
+</button>
+{% else %}
+<button
+    hx-post="/refresh"
+    hx-target="#refresh-container"
+    hx-swap="innerHTML"
+    class="refresh-btn"
+>
+    Refresh All
+</button>
+{% endif %}
