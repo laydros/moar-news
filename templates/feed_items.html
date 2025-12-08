@@ -1,3 +1,4 @@
+<ul id="feed-{{ feed.id }}-items" hx-swap-oob="beforeend">
 {% for item in items %}
 <li class="item">
     <a href="{{ item.link }}" target="_blank" rel="noopener" class="item-link">
@@ -12,18 +13,17 @@
     {% endif %}
 </li>
 {% endfor %}
+</ul>
 
-<div id="feed-{{ feed.id }}-more" hx-swap-oob="true">
 {% if has_more %}
-    <button
-        hx-get="/feed/{{ feed.id }}/more?offset={{ offset }}"
-        hx-target="#feed-{{ feed.id }}-items"
-        hx-swap="beforeend"
-        hx-select="li"
-        hx-select-oob="#feed-{{ feed.id }}-more"
-        class="load-more-btn"
-    >
-        Show More
-    </button>
+<button
+    hx-get="/feed/{{ feed.id }}/more?offset={{ offset }}"
+    hx-target="this"
+    hx-swap="outerHTML"
+    class="load-more-btn"
+>
+    Show More
+</button>
+{% else %}
+<span class="no-more">No more items</span>
 {% endif %}
-</div>
