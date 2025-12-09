@@ -1,6 +1,6 @@
 <ul id="feed-{{ feed.id }}-items" hx-swap-oob="beforeend">
 {% for item in items %}
-<li class="item">
+<li class="item extra-item">
     <a href="{{ item.link }}" target="_blank" rel="noopener" class="item-link">
         {{ item.title }}
     </a>
@@ -16,14 +16,30 @@
 </ul>
 
 {% if has_more %}
-<button
-    hx-get="/feed/{{ feed.id }}/more?offset={{ offset }}"
-    hx-target="this"
-    hx-swap="outerHTML"
-    class="load-more-btn"
->
-    Show More
-</button>
+<div class="load-more-buttons">
+    <button
+        hx-get="/feed/{{ feed.id }}/more?offset={{ offset }}"
+        hx-target="this"
+        hx-swap="outerHTML"
+        class="load-more-btn"
+    >
+        Show More
+    </button>
+    <button
+        class="load-more-btn show-less-btn"
+        onclick="toggleShowLess(this, {{ feed.id }})"
+    >
+        Show Less
+    </button>
+</div>
 {% else %}
-<span class="no-more">No more items</span>
+<div class="load-more-buttons">
+    <span class="no-more">No more items</span>
+    <button
+        class="load-more-btn show-less-btn"
+        onclick="toggleShowLess(this, {{ feed.id }})"
+    >
+        Show Less
+    </button>
+</div>
 {% endif %}

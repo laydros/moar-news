@@ -5,20 +5,41 @@
     padding: 0;
 }
 
+/* Light theme (default) */
 :root {
-    --bg-primary: #121212;
-    --bg-secondary: #1e1e1e;
-    --bg-tertiary: #2d2d2d;
-    --bg-hover: #333;
-    --text-primary: #e0e0e0;
-    --text-secondary: #999;
-    --text-muted: #666;
-    --link: #6cb6ff;
-    --link-hover: #8fc9ff;
-    --link-visited: #888;
-    --border: #333;
-    --accent: #ff6b35;
-    --error: #ff5252;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f5;
+    --bg-tertiary: #e8e8e8;
+    --bg-hover: #ebebeb;
+    --text-primary: #1a1a1a;
+    --text-secondary: #555;
+    --text-muted: #888;
+    --link: #0066cc;
+    --link-hover: #0052a3;
+    --link-visited: #666;
+    --border: #ddd;
+    --accent: #e85a1b;
+    --error: #d32f2f;
+    --page-padding: 1rem;
+}
+
+/* Dark theme - follows system preference */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-primary: #121212;
+        --bg-secondary: #1e1e1e;
+        --bg-tertiary: #2d2d2d;
+        --bg-hover: #333;
+        --text-primary: #e0e0e0;
+        --text-secondary: #999;
+        --text-muted: #666;
+        --link: #6cb6ff;
+        --link-hover: #8fc9ff;
+        --link-visited: #888;
+        --border: #333;
+        --accent: #ff6b35;
+        --error: #ff5252;
+    }
 }
 
 html {
@@ -33,6 +54,7 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    padding: 0 var(--page-padding);
 }
 
 /* Site Header */
@@ -174,7 +196,7 @@ body {
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
-    padding: 0.5rem 0.85rem;
+    padding: 0.5rem 1rem;
     border-bottom: 1px solid var(--border);
 }
 
@@ -214,23 +236,40 @@ body {
 }
 
 /* Load more container */
-.load-more-container {
-    padding: 0.6rem 0.85rem;
+.load-more-container,
+.load-more-buttons {
+    padding: 0.6rem 1rem;
     border-top: 1px solid var(--border);
     background-color: var(--bg-secondary);
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .load-more-btn {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 0.5rem;
 }
 
 .no-more {
-    display: block;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
     color: var(--text-muted);
     font-size: 0.75rem;
     padding: 0.25rem;
+}
+
+/* Hidden utility class */
+.hidden {
+    display: none !important;
+}
+
+/* Extra items (loaded via Show More) */
+.extra-item.hidden {
+    display: none !important;
 }
 
 /* Site Footer */
