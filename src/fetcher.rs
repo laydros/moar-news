@@ -138,17 +138,24 @@ impl Fetcher {
             return None;
         }
 
-        // Look for a comments link in the links array
+        // Look for a comments link in the links array (standard RSS <comments> element)
         for link in &entry.links {
-            if link.rel.as_deref() == Some("replies") || link.rel.as_deref() == Some("comments") {
+            let rel = link.rel.as_deref().unwrap_or("").to_lowercase();
+            if rel == "replies" || rel == "comments" {
                 return Some(link.href.clone());
             }
         }
 
-        // For Hacker News, the guid/id IS the discussion URL
+        // For Hacker News, look for HN discussion URL in any link
         if feed.url.contains("news.ycombinator.com") {
-            // HN RSS guid is like "https://news.ycombinator.com/item?id=12345"
-            if entry.id.contains("item?id=") {
+            // Check all links for an HN discussion URL
+            for link in &entry.links {
+                if link.href.contains("news.ycombinator.com/item?id=") {
+                    return Some(link.href.clone());
+                }
+            }
+            // Fallback: check if guid/id is the discussion URL
+            if entry.id.contains("news.ycombinator.com/item?id=") {
                 return Some(entry.id.clone());
             }
         }
