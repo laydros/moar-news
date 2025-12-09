@@ -8,7 +8,7 @@
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
 <body>
-    <header>
+    <header class="site-header">
         <h1>Moar News</h1>
         <div id="refresh-container">
             <button
@@ -32,42 +32,42 @@
                 {% endif %}
             </header>
 
-            <ul class="items-list" id="feed-{{ feed_data.feed.id }}-items">
-                {% for item in feed_data.items %}
-                <li class="item">
-                    <a href="{{ item.link }}" target="_blank" rel="noopener" class="item-link">
-                        {{ item.title }}
-                    </a>
-                    {% if let Some(discussion) = item.discussion_link %}
-                    <a href="{{ discussion }}" target="_blank" rel="noopener" class="discussion-link" title="Discussion">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                            <path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/>
-                        </svg>
-                    </a>
-                    {% endif %}
-                </li>
-                {% endfor %}
-            </ul>
+            <div class="feed-content">
+                <ul class="items-list" id="feed-{{ feed_data.feed.id }}-items">
+                    {% for item in feed_data.items %}
+                    <li class="item">
+                        <a href="{{ item.link }}" target="_blank" rel="noopener" class="item-link">
+                            {{ item.title }}
+                        </a>
+                        {% if let Some(discussion) = item.discussion_link %}
+                        <a href="{{ discussion }}" target="_blank" rel="noopener" class="discussion-link" title="Discussion">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                <path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/>
+                            </svg>
+                        </a>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
 
-            {% if feed_data.has_more %}
-            <div class="load-more-container" id="feed-{{ feed_data.feed.id }}-more">
-                <button
-                    hx-get="/feed/{{ feed_data.feed.id }}/more?offset=15"
-                    hx-target="#feed-{{ feed_data.feed.id }}-items"
-                    hx-swap="beforeend"
-                    hx-select="li"
-                    hx-select-oob="#feed-{{ feed_data.feed.id }}-more"
-                    class="load-more-btn"
-                >
-                    Show More
-                </button>
+                {% if feed_data.has_more %}
+                <div class="load-more-container" id="feed-{{ feed_data.feed.id }}-more">
+                    <button
+                        hx-get="/feed/{{ feed_data.feed.id }}/more?offset=15"
+                        hx-target="this"
+                        hx-swap="outerHTML"
+                        class="load-more-btn"
+                    >
+                        Show More
+                    </button>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
         </section>
         {% endfor %}
     </main>
 
-    <footer>
+    <footer class="site-footer">
         <p>Powered by RSS</p>
     </footer>
 </body>
