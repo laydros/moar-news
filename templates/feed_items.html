@@ -15,31 +15,11 @@
 {% endfor %}
 </ul>
 
-{% if has_more %}
-<div class="load-more-buttons">
-    <button
-        hx-get="/feed/{{ feed.id }}/more?offset={{ offset }}"
-        hx-target="this"
-        hx-swap="outerHTML"
-        class="load-more-btn"
-    >
-        Show More
-    </button>
-    <button
-        class="load-more-btn show-less-btn"
-        onclick="toggleShowLess(this, {{ feed.id }})"
-    >
-        Show Less
-    </button>
-</div>
-{% else %}
-<div class="load-more-buttons">
-    <span class="no-more">No more items</span>
-    <button
-        class="load-more-btn show-less-btn"
-        onclick="toggleShowLess(this, {{ feed.id }})"
-    >
-        Show Less
-    </button>
-</div>
-{% endif %}
+<button
+    class="load-more-btn"
+    data-feed-id="{{ feed.id }}"
+    data-expanded="true"
+    onclick="toggleItems(this)"
+>
+    Show Less
+</button>
