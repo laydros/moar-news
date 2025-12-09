@@ -112,7 +112,7 @@ impl Fetcher {
 
             // Get discussion link for HN/Lobste.rs
             let discussion_link =
-                self.extract_discussion_link(feed, &entry, comments_map.get(&link));
+                self.extract_discussion_link(feed, &entry, comments_map.get(&link), &link);
 
             // Get published date
             let published: Option<DateTime<Utc>> = entry
@@ -179,33 +179,20 @@ impl Fetcher {
         feed: &Feed,
         entry: &feed_rs::model::Entry,
         comments_from_xml: Option<&String>,
+        main_link: &str,
     ) -> Option<String> {
         if !feed.has_discussion {
             return None;
         }
 
-        // First, check if we extracted a <comments> URL from raw XML
-        if let Some(comments_url) = comments_from_xml {
-            return Some(comments_url.clone());
-        }
-
-        // Look for a comments link in the links array (standard RSS <comments> element)
-        for link in &entry.links {
-            let rel = link.rel.as_deref().unwrap_or("").to_lowercase();
-            if rel == "replies" || rel == "comments" {
-                return Some(link.href.clone());
-            }
-        }
-
-        // For Hacker News, look for HN discussion URL in any link
+        // For Hacker News: the guid/id IS the discussion URL
+        // Skip if the main link is already an HN URL (e.g., Ask HN posts)
         if feed.url.contains("news.ycombinator.com") {
-            // Check all links for an HN discussion URL
-            for link in &entry.links {
-                if link.href.contains("news.ycombinator.com/item?id=") {
-                    return Some(link.href.clone());
-                }
+            if main_link.contains("news.ycombinator.com/item?id=") {
+                // Main link IS the discussion, no need for separate discussion link
+                return None;
             }
-            // Fallback: check if guid/id is the discussion URL
+            // Use entry.id (guid) as the discussion URL - it's always the HN item URL
             if entry.id.contains("news.ycombinator.com/item?id=") {
                 return Some(entry.id.clone());
             }
@@ -213,9 +200,21 @@ impl Fetcher {
 
         // For Lobste.rs, the guid/id is the discussion URL
         if feed.url.contains("lobste.rs") {
-            // Lobste.rs RSS has guid like "https://lobste.rs/s/xxxxx"
             if entry.id.contains("lobste.rs/s/") {
                 return Some(entry.id.clone());
+            }
+        }
+
+        // For other feeds: check if we extracted a <comments> URL from raw XML
+        if let Some(comments_url) = comments_from_xml {
+            return Some(comments_url.clone());
+        }
+
+        // Look for a comments link in the links array
+        for link in &entry.links {
+            let rel = link.rel.as_deref().unwrap_or("").to_lowercase();
+            if rel == "replies" || rel == "comments" {
+                return Some(link.href.clone());
             }
         }
 
