@@ -60,6 +60,12 @@
                     >
                         Show More
                     </button>
+                    <button
+                        class="load-more-btn show-less-btn hidden"
+                        onclick="toggleShowLess(this, {{ feed_data.feed.id }})"
+                    >
+                        Show Less
+                    </button>
                 </div>
                 {% endif %}
             </div>
@@ -70,5 +76,60 @@
     <footer class="site-footer">
         <p>Powered by RSS</p>
     </footer>
+
+    <script>
+        function toggleShowLess(btn, feedId) {
+            const itemsList = document.getElementById(`feed-${feedId}-items`);
+            const extraItems = itemsList.querySelectorAll('.extra-item');
+            const container = btn.closest('.load-more-container, .load-more-buttons');
+
+            // Hide all extra items
+            extraItems.forEach(item => item.classList.add('hidden'));
+
+            // Hide the Show Less button
+            btn.classList.add('hidden');
+
+            // Find or create a Show More button that reveals hidden items
+            let showMoreBtn = container.querySelector('.show-more-toggle');
+            if (!showMoreBtn) {
+                showMoreBtn = document.createElement('button');
+                showMoreBtn.className = 'load-more-btn show-more-toggle';
+                showMoreBtn.textContent = 'Show More';
+                showMoreBtn.onclick = function() {
+                    // Show the hidden extra items
+                    extraItems.forEach(item => item.classList.remove('hidden'));
+                    // Hide this button, show the Show Less button
+                    this.classList.add('hidden');
+                    btn.classList.remove('hidden');
+                };
+                container.insertBefore(showMoreBtn, container.firstChild);
+            } else {
+                showMoreBtn.classList.remove('hidden');
+            }
+
+            // Hide the HTMX load more button if it exists (we're using toggle now)
+            const htmxBtn = container.querySelector('[hx-get]');
+            if (htmxBtn) {
+                htmxBtn.classList.add('hidden');
+            }
+        }
+
+        // After HTMX loads new items, show the Show Less button
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            // Find the container that was updated
+            const container = evt.detail.target.closest('.load-more-container, .load-more-buttons');
+            if (container) {
+                const showLessBtn = container.querySelector('.show-less-btn');
+                if (showLessBtn) {
+                    showLessBtn.classList.remove('hidden');
+                }
+                // Hide any show-more-toggle buttons (used after Show Less was clicked)
+                const toggleBtn = container.querySelector('.show-more-toggle');
+                if (toggleBtn) {
+                    toggleBtn.classList.add('hidden');
+                }
+            }
+        });
+    </script>
 </body>
 </html>
