@@ -35,3 +35,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Error handling
 thiserror = "1"
 anyhow = "1"
+
+[dev-dependencies]
+# Testing utilities
+tempfile = "3"
+tokio-test = "0.4"
+wiremock = "0.6"
+axum-test = "16"
+tower = { version = "0.4", features = ["util"] }
+http-body-util = "0.1"
+serde_urlencoded = "0.7"
