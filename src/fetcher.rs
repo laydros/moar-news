@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -82,6 +83,9 @@ impl Fetcher {
         let response = self.client.get(&feed.url).send().await?;
         let bytes = response.bytes().await?;
 
+        // Extract comments URLs from raw XML (feed_rs doesn't parse RSS <comments> element)
+        let comments_map = self.extract_comments_from_xml(&bytes);
+
         let parsed = parser::parse(&bytes[..])?;
 
         let mut count = 0;
@@ -107,7 +111,8 @@ impl Fetcher {
             }
 
             // Get discussion link for HN/Lobste.rs
-            let discussion_link = self.extract_discussion_link(feed, &entry);
+            let discussion_link =
+                self.extract_discussion_link(feed, &entry, comments_map.get(&link));
 
             // Get published date
             let published: Option<DateTime<Utc>> = entry
@@ -133,9 +138,55 @@ impl Fetcher {
         Ok(())
     }
 
-    fn extract_discussion_link(&self, feed: &Feed, entry: &feed_rs::model::Entry) -> Option<String> {
+    /// Extract <comments> URLs from raw RSS XML since feed_rs doesn't parse them
+    fn extract_comments_from_xml(&self, xml_bytes: &[u8]) -> HashMap<String, String> {
+        let mut comments_map = HashMap::new();
+        let xml_str = match std::str::from_utf8(xml_bytes) {
+            Ok(s) => s,
+            Err(_) => return comments_map,
+        };
+
+        // Simple regex-free parsing: find <item> blocks and extract <link> and <comments>
+        for item_block in xml_str.split("<item>").skip(1) {
+            let item_end = item_block.find("</item>").unwrap_or(item_block.len());
+            let item = &item_block[..item_end];
+
+            // Extract <link>
+            let link = Self::extract_xml_element(item, "link");
+            // Extract <comments>
+            let comments = Self::extract_xml_element(item, "comments");
+
+            if let (Some(link), Some(comments)) = (link, comments) {
+                comments_map.insert(link, comments);
+            }
+        }
+
+        comments_map
+    }
+
+    fn extract_xml_element(xml: &str, tag: &str) -> Option<String> {
+        let start_tag = format!("<{}>", tag);
+        let end_tag = format!("</{}>", tag);
+
+        let start = xml.find(&start_tag)? + start_tag.len();
+        let end = xml[start..].find(&end_tag)? + start;
+
+        Some(xml[start..end].trim().to_string())
+    }
+
+    fn extract_discussion_link(
+        &self,
+        feed: &Feed,
+        entry: &feed_rs::model::Entry,
+        comments_from_xml: Option<&String>,
+    ) -> Option<String> {
         if !feed.has_discussion {
             return None;
+        }
+
+        // First, check if we extracted a <comments> URL from raw XML
+        if let Some(comments_url) = comments_from_xml {
+            return Some(comments_url.clone());
         }
 
         // Look for a comments link in the links array (standard RSS <comments> element)
