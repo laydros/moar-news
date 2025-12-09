@@ -84,7 +84,7 @@ impl Fetcher {
         let bytes = response.bytes().await?;
 
         // Extract comments URLs from raw XML (feed_rs doesn't parse RSS <comments> element)
-        let comments_map = self.extract_comments_from_xml(&bytes);
+        let comments_map = Self::extract_comments_from_xml(&bytes);
 
         let parsed = parser::parse(&bytes[..])?;
 
@@ -112,7 +112,7 @@ impl Fetcher {
 
             // Get discussion link for HN/Lobste.rs
             let discussion_link =
-                self.extract_discussion_link(feed, &entry, comments_map.get(&link), &link);
+                Self::extract_discussion_link(feed, &entry, comments_map.get(&link), &link);
 
             // Get published date
             let published: Option<DateTime<Utc>> = entry
@@ -139,7 +139,7 @@ impl Fetcher {
     }
 
     /// Extract <comments> URLs from raw RSS XML since feed_rs doesn't parse them
-    fn extract_comments_from_xml(&self, xml_bytes: &[u8]) -> HashMap<String, String> {
+    pub fn extract_comments_from_xml(xml_bytes: &[u8]) -> HashMap<String, String> {
         let mut comments_map = HashMap::new();
         let xml_str = match std::str::from_utf8(xml_bytes) {
             Ok(s) => s,
@@ -164,7 +164,7 @@ impl Fetcher {
         comments_map
     }
 
-    fn extract_xml_element(xml: &str, tag: &str) -> Option<String> {
+    pub fn extract_xml_element(xml: &str, tag: &str) -> Option<String> {
         let start_tag = format!("<{}>", tag);
         let end_tag = format!("</{}>", tag);
 
@@ -174,8 +174,7 @@ impl Fetcher {
         Some(xml[start..end].trim().to_string())
     }
 
-    fn extract_discussion_link(
-        &self,
+    pub fn extract_discussion_link(
         feed: &Feed,
         entry: &feed_rs::model::Entry,
         comments_from_xml: Option<&String>,
@@ -237,6 +236,400 @@ pub async fn start_background_refresh(fetcher: Arc<Fetcher>, interval_minutes: u
         info!("Starting scheduled feed refresh");
         if let Err(e) = fetcher.refresh_all_feeds().await {
             error!("Scheduled feed refresh failed: {}", e);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use feed_rs::model::{Entry, Link};
+
+    fn create_test_feed(name: &str, url: &str, has_discussion: bool) -> Feed {
+        Feed {
+            id: 1,
+            name: name.to_string(),
+            url: url.to_string(),
+            has_discussion,
+            last_fetched: None,
+            last_error: None,
+        }
+    }
+
+    fn create_test_entry(id: &str, links: Vec<(&str, Option<&str>)>) -> Entry {
+        Entry {
+            id: id.to_string(),
+            links: links
+                .into_iter()
+                .map(|(href, rel)| Link {
+                    href: href.to_string(),
+                    rel: rel.map(|r| r.to_string()),
+                    media_type: None,
+                    href_lang: None,
+                    title: None,
+                    length: None,
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    // Tests for extract_xml_element
+    mod extract_xml_element_tests {
+        use super::*;
+
+        #[test]
+        fn test_extract_simple_element() {
+            let xml = "<title>Hello World</title>";
+            let result = Fetcher::extract_xml_element(xml, "title");
+            assert_eq!(result, Some("Hello World".to_string()));
+        }
+
+        #[test]
+        fn test_extract_element_with_whitespace() {
+            let xml = "<link>  https://example.com  </link>";
+            let result = Fetcher::extract_xml_element(xml, "link");
+            assert_eq!(result, Some("https://example.com".to_string()));
+        }
+
+        #[test]
+        fn test_extract_element_not_found() {
+            let xml = "<title>Hello</title>";
+            let result = Fetcher::extract_xml_element(xml, "link");
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_extract_element_empty() {
+            let xml = "<title></title>";
+            let result = Fetcher::extract_xml_element(xml, "title");
+            assert_eq!(result, Some("".to_string()));
+        }
+
+        #[test]
+        fn test_extract_element_no_closing_tag() {
+            let xml = "<title>Hello";
+            let result = Fetcher::extract_xml_element(xml, "title");
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_extract_element_with_surrounding_content() {
+            let xml = "<item><link>https://example.com</link><title>Test</title></item>";
+            let result = Fetcher::extract_xml_element(xml, "link");
+            assert_eq!(result, Some("https://example.com".to_string()));
+        }
+
+        #[test]
+        fn test_extract_first_element_when_multiple() {
+            let xml = "<link>first</link><link>second</link>";
+            let result = Fetcher::extract_xml_element(xml, "link");
+            assert_eq!(result, Some("first".to_string()));
+        }
+    }
+
+    // Tests for extract_comments_from_xml
+    mod extract_comments_from_xml_tests {
+        use super::*;
+
+        #[test]
+        fn test_extract_single_item_with_comments() {
+            let xml = r#"
+                <rss>
+                    <channel>
+                        <item>
+                            <link>https://article.com</link>
+                            <comments>https://forum.com/discuss/123</comments>
+                        </item>
+                    </channel>
+                </rss>
+            "#;
+
+            let result = Fetcher::extract_comments_from_xml(xml.as_bytes());
+            assert_eq!(result.len(), 1);
+            assert_eq!(
+                result.get("https://article.com"),
+                Some(&"https://forum.com/discuss/123".to_string())
+            );
+        }
+
+        #[test]
+        fn test_extract_multiple_items_with_comments() {
+            let xml = r#"
+                <rss>
+                    <channel>
+                        <item>
+                            <link>https://article1.com</link>
+                            <comments>https://forum.com/1</comments>
+                        </item>
+                        <item>
+                            <link>https://article2.com</link>
+                            <comments>https://forum.com/2</comments>
+                        </item>
+                    </channel>
+                </rss>
+            "#;
+
+            let result = Fetcher::extract_comments_from_xml(xml.as_bytes());
+            assert_eq!(result.len(), 2);
+            assert_eq!(
+                result.get("https://article1.com"),
+                Some(&"https://forum.com/1".to_string())
+            );
+            assert_eq!(
+                result.get("https://article2.com"),
+                Some(&"https://forum.com/2".to_string())
+            );
+        }
+
+        #[test]
+        fn test_extract_item_without_comments() {
+            let xml = r#"
+                <rss>
+                    <channel>
+                        <item>
+                            <link>https://article.com</link>
+                            <title>No comments here</title>
+                        </item>
+                    </channel>
+                </rss>
+            "#;
+
+            let result = Fetcher::extract_comments_from_xml(xml.as_bytes());
+            assert!(result.is_empty());
+        }
+
+        #[test]
+        fn test_extract_mixed_items() {
+            let xml = r#"
+                <rss>
+                    <channel>
+                        <item>
+                            <link>https://article1.com</link>
+                            <comments>https://forum.com/1</comments>
+                        </item>
+                        <item>
+                            <link>https://article2.com</link>
+                        </item>
+                        <item>
+                            <link>https://article3.com</link>
+                            <comments>https://forum.com/3</comments>
+                        </item>
+                    </channel>
+                </rss>
+            "#;
+
+            let result = Fetcher::extract_comments_from_xml(xml.as_bytes());
+            assert_eq!(result.len(), 2);
+            assert!(result.contains_key("https://article1.com"));
+            assert!(!result.contains_key("https://article2.com"));
+            assert!(result.contains_key("https://article3.com"));
+        }
+
+        #[test]
+        fn test_extract_empty_xml() {
+            let xml = "";
+            let result = Fetcher::extract_comments_from_xml(xml.as_bytes());
+            assert!(result.is_empty());
+        }
+
+        #[test]
+        fn test_extract_invalid_utf8() {
+            let invalid_bytes = vec![0xFF, 0xFE, 0x00, 0x01];
+            let result = Fetcher::extract_comments_from_xml(&invalid_bytes);
+            assert!(result.is_empty());
+        }
+
+        #[test]
+        fn test_extract_no_items() {
+            let xml = r#"
+                <rss>
+                    <channel>
+                        <title>Empty Feed</title>
+                    </channel>
+                </rss>
+            "#;
+
+            let result = Fetcher::extract_comments_from_xml(xml.as_bytes());
+            assert!(result.is_empty());
+        }
+    }
+
+    // Tests for extract_discussion_link
+    mod extract_discussion_link_tests {
+        use super::*;
+
+        #[test]
+        fn test_no_discussion_when_disabled() {
+            let feed = create_test_feed("Blog", "https://blog.example.com", false);
+            let entry = create_test_entry("123", vec![("https://article.com", None)]);
+
+            let result = Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.com");
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_hn_discussion_link_from_entry_id() {
+            let feed = create_test_feed(
+                "Hacker News",
+                "https://news.ycombinator.com/rss",
+                true,
+            );
+            let entry = create_test_entry(
+                "https://news.ycombinator.com/item?id=12345",
+                vec![("https://article.example.com", None)],
+            );
+
+            let result =
+                Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.example.com");
+            assert_eq!(
+                result,
+                Some("https://news.ycombinator.com/item?id=12345".to_string())
+            );
+        }
+
+        #[test]
+        fn test_hn_skip_when_main_link_is_discussion() {
+            let feed = create_test_feed(
+                "Hacker News",
+                "https://news.ycombinator.com/rss",
+                true,
+            );
+            // Ask HN posts where the main link IS the discussion
+            let entry = create_test_entry(
+                "https://news.ycombinator.com/item?id=12345",
+                vec![("https://news.ycombinator.com/item?id=12345", None)],
+            );
+
+            let result = Fetcher::extract_discussion_link(
+                &feed,
+                &entry,
+                None,
+                "https://news.ycombinator.com/item?id=12345",
+            );
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_lobsters_discussion_link() {
+            let feed = create_test_feed("Lobste.rs", "https://lobste.rs/rss", true);
+            let entry = create_test_entry(
+                "https://lobste.rs/s/abc123",
+                vec![("https://article.example.com", None)],
+            );
+
+            let result =
+                Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.example.com");
+            assert_eq!(result, Some("https://lobste.rs/s/abc123".to_string()));
+        }
+
+        #[test]
+        fn test_discussion_link_from_xml_comments() {
+            let feed = create_test_feed("Reddit", "https://reddit.com/.rss", true);
+            let entry = create_test_entry("123", vec![("https://article.com", None)]);
+            let comments_url = "https://reddit.com/r/programming/comments/abc".to_string();
+
+            let result = Fetcher::extract_discussion_link(
+                &feed,
+                &entry,
+                Some(&comments_url),
+                "https://article.com",
+            );
+            assert_eq!(result, Some(comments_url));
+        }
+
+        #[test]
+        fn test_discussion_link_from_replies_rel() {
+            let feed = create_test_feed("Forum", "https://forum.example.com/feed", true);
+            let entry = create_test_entry(
+                "123",
+                vec![
+                    ("https://article.com", None),
+                    ("https://forum.example.com/topic/123/replies", Some("replies")),
+                ],
+            );
+
+            let result = Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.com");
+            assert_eq!(
+                result,
+                Some("https://forum.example.com/topic/123/replies".to_string())
+            );
+        }
+
+        #[test]
+        fn test_discussion_link_from_comments_rel() {
+            let feed = create_test_feed("Blog", "https://blog.example.com/feed", true);
+            let entry = create_test_entry(
+                "123",
+                vec![
+                    ("https://blog.example.com/post/1", None),
+                    ("https://blog.example.com/post/1/comments", Some("comments")),
+                ],
+            );
+
+            let result = Fetcher::extract_discussion_link(
+                &feed,
+                &entry,
+                None,
+                "https://blog.example.com/post/1",
+            );
+            assert_eq!(
+                result,
+                Some("https://blog.example.com/post/1/comments".to_string())
+            );
+        }
+
+        #[test]
+        fn test_no_discussion_link_found() {
+            let feed = create_test_feed("Blog", "https://blog.example.com/feed", true);
+            let entry = create_test_entry("123", vec![("https://article.com", None)]);
+
+            let result = Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.com");
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_xml_comments_takes_precedence_over_link_rel() {
+            let feed = create_test_feed("Forum", "https://forum.example.com/feed", true);
+            let entry = create_test_entry(
+                "123",
+                vec![
+                    ("https://article.com", None),
+                    ("https://forum.example.com/fallback", Some("replies")),
+                ],
+            );
+            let comments_url = "https://forum.example.com/preferred".to_string();
+
+            let result = Fetcher::extract_discussion_link(
+                &feed,
+                &entry,
+                Some(&comments_url),
+                "https://article.com",
+            );
+            assert_eq!(result, Some(comments_url));
+        }
+
+        #[test]
+        fn test_case_insensitive_rel_matching() {
+            let feed = create_test_feed("Blog", "https://blog.example.com/feed", true);
+            let entry = create_test_entry(
+                "123",
+                vec![
+                    ("https://blog.example.com/post/1", None),
+                    ("https://blog.example.com/post/1/comments", Some("COMMENTS")),
+                ],
+            );
+
+            let result = Fetcher::extract_discussion_link(
+                &feed,
+                &entry,
+                None,
+                "https://blog.example.com/post/1",
+            );
+            assert_eq!(
+                result,
+                Some("https://blog.example.com/post/1/comments".to_string())
+            );
         }
     }
 }

@@ -164,3 +164,294 @@ pub async fn refresh_status(
 pub async fn health() -> impl IntoResponse {
     Html("OK")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::FeedConfig;
+    use crate::db::Database;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+        routing::{get, post},
+        Router,
+    };
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    async fn create_test_app() -> (Router, Arc<Database>) {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        db.initialize().await.unwrap();
+        let db = Arc::new(db);
+
+        let fetcher = Arc::new(Fetcher::new(db.clone()));
+        let state = Arc::new(AppState {
+            db: db.clone(),
+            fetcher,
+        });
+
+        let app = Router::new()
+            .route("/", get(index))
+            .route("/feed/:id/more", get(feed_more))
+            .route("/refresh", post(refresh))
+            .route("/refresh/status", get(refresh_status))
+            .route("/health", get(health))
+            .with_state(state);
+
+        (app, db)
+    }
+
+    async fn setup_test_data(db: &Database) {
+        let configs = vec![
+            FeedConfig {
+                name: "Test Feed 1".to_string(),
+                url: "https://feed1.com/rss".to_string(),
+                has_discussion: true,
+            },
+            FeedConfig {
+                name: "Test Feed 2".to_string(),
+                url: "https://feed2.com/rss".to_string(),
+                has_discussion: false,
+            },
+        ];
+        db.sync_feeds(&configs).await.unwrap();
+
+        // Add items to first feed
+        let feeds = db.get_all_feeds().await.unwrap();
+        for i in 1..=20 {
+            let published = chrono::Utc::now() - chrono::Duration::hours(20 - i);
+            db.upsert_item(
+                feeds[0].id,
+                &format!("guid-{}", i),
+                &format!("Article {}", i),
+                &format!("https://article{}.com", i),
+                None,
+                Some(published),
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    mod health_tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_health_endpoint() {
+            let (app, _db) = create_test_app().await;
+
+            let response = app
+                .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            assert_eq!(&body[..], b"OK");
+        }
+    }
+
+    mod index_tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_index_empty_feeds() {
+            let (app, _db) = create_test_app().await;
+
+            let response = app
+                .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn test_index_with_feeds() {
+            let (app, db) = create_test_app().await;
+            setup_test_data(&db).await;
+
+            let response = app
+                .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let body_str = String::from_utf8(body.to_vec()).unwrap();
+
+            // Check that feed names appear in the response
+            assert!(body_str.contains("Test Feed 1"));
+            assert!(body_str.contains("Test Feed 2"));
+        }
+
+        #[tokio::test]
+        async fn test_index_shows_items() {
+            let (app, db) = create_test_app().await;
+            setup_test_data(&db).await;
+
+            let response = app
+                .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let body_str = String::from_utf8(body.to_vec()).unwrap();
+
+            // Check that some article titles appear
+            assert!(body_str.contains("Article"));
+        }
+    }
+
+    mod feed_more_tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_feed_more_returns_items() {
+            let (app, db) = create_test_app().await;
+            setup_test_data(&db).await;
+
+            let feeds = db.get_all_feeds().await.unwrap();
+            let feed_id = feeds[0].id;
+
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri(format!("/feed/{}/more?offset=0", feed_id))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let body_str = String::from_utf8(body.to_vec()).unwrap();
+            assert!(body_str.contains("Article"));
+        }
+
+        #[tokio::test]
+        async fn test_feed_more_with_offset() {
+            let (app, db) = create_test_app().await;
+            setup_test_data(&db).await;
+
+            let feeds = db.get_all_feeds().await.unwrap();
+            let feed_id = feeds[0].id;
+
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri(format!("/feed/{}/more?offset=15", feed_id))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn test_feed_more_nonexistent_feed() {
+            let (app, _db) = create_test_app().await;
+
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/feed/999/more?offset=0")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    mod refresh_tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_refresh_endpoint() {
+            let (app, _db) = create_test_app().await;
+
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/refresh")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let body_str = String::from_utf8(body.to_vec()).unwrap();
+
+            // Should indicate refreshing state
+            assert!(body_str.contains("Refreshing") || body_str.contains("refresh"));
+        }
+
+        #[tokio::test]
+        async fn test_refresh_status_endpoint() {
+            let (app, _db) = create_test_app().await;
+
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/refresh/status")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+    }
+
+    mod pagination_tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_has_more_flag_when_items_exceed_page_size() {
+            let (app, db) = create_test_app().await;
+            setup_test_data(&db).await; // Creates 20 items, ITEMS_PER_PAGE is 15
+
+            let response = app
+                .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let body_str = String::from_utf8(body.to_vec()).unwrap();
+
+            // Should contain "Show More" button for feed with 20 items
+            assert!(body_str.contains("Show More") || body_str.contains("hx-get"));
+        }
+    }
+
+    mod more_query_tests {
+        use super::*;
+
+        #[test]
+        fn test_more_query_default_offset() {
+            // This tests the MoreQuery struct's default behavior
+            let query: MoreQuery = serde_urlencoded::from_str("").unwrap();
+            assert_eq!(query.offset, 0);
+        }
+
+        #[test]
+        fn test_more_query_with_offset() {
+            let query: MoreQuery = serde_urlencoded::from_str("offset=10").unwrap();
+            assert_eq!(query.offset, 10);
+        }
+    }
+}
