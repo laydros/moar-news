@@ -22,7 +22,7 @@ A lightweight, self-hosted RSS feed aggregator that displays multiple feeds in a
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/moar-news.git
+   git clone https://github.com/laydros/moar-news.git
    cd moar-news
    ```
 
