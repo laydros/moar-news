@@ -262,6 +262,13 @@ moar-news/
 └── .github/workflows # CI/CD
 ```
 
+## AI use
+Project made with LLM assistance. I respect your choice not to use it if that
+bothers you. But it works well for my brain.
+
+## Support
+This is a personal project; issues/PRs are welcome but not guarantees on response time.
+
 ## License
 
-MIT
+GPLv3
