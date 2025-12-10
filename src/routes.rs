@@ -23,6 +23,8 @@ pub struct AppState {
 #[template(path = "index.html")]
 pub struct IndexTemplate {
     pub feeds: Vec<FeedWithItems>,
+    pub version: &'static str,
+    pub repo_url: &'static str,
 }
 
 pub struct FeedWithItems {
@@ -105,6 +107,8 @@ pub async fn index(
 
     Ok(HtmlTemplate(IndexTemplate {
         feeds: feeds_with_items,
+        version: env!("CARGO_PKG_VERSION"),
+        repo_url: "https://github.com/laydros/moar-news",
     }))
 }
 
