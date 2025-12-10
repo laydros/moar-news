@@ -1,0 +1,28 @@
+# Fly.io configuration for Moar News
+# See https://fly.io/docs/reference/configuration/ for details
+
+app = "moar-news"
+primary_region = "ord"
+
+[build]
+
+[env]
+  RUST_LOG = "moar_news=info,tower_http=info"
+  DATABASE_URL = "sqlite:/data/moar_news.db?mode=rwc"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[mounts]
+  source = "moar_news_data"
+  destination = "/data"

@@ -34,7 +34,9 @@ async fn main() -> anyhow::Result<()> {
     info!("Loaded {} feeds from configuration", config.feeds.len());
 
     // Initialize database
-    let db = Database::new("sqlite:moar_news.db?mode=rwc").await?;
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "sqlite:moar_news.db?mode=rwc".to_string());
+    let db = Database::new(&database_url).await?;
     db.initialize().await?;
     db.sync_feeds(&config.feeds).await?;
     info!("Database initialized");
