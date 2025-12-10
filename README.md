@@ -2,6 +2,8 @@
 
 A lightweight, self-hosted RSS feed aggregator that displays multiple feeds in a clean, columnar dashboard. Built with Rust for performance and reliability.
 
+Inspired by [spike.news](https://spike.news), which I liked but had issues with links getting mixed up between feeds. This is my take on the same concept.
+
 ## Features
 
 - **Multi-feed dashboard** - View all your feeds side-by-side in a responsive grid
