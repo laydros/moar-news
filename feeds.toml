@@ -35,3 +35,11 @@ url = "https://www.theverge.com/rss/index.xml"
 [[feeds]]
 name = "Liliputing"
 url = "https://liliputing.com/feed/"
+
+[[feeds]]
+name = "NPR News"
+url = "https://feeds.npr.org/1001/rss.xml"
+
+[[feeds]]
+name = "Soylent News"
+url = "https://soylentnews.org/index.rss"

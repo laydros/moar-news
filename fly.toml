@@ -1,28 +1,31 @@
-# Fly.io configuration for Moar News
-# See https://fly.io/docs/reference/configuration/ for details
+# fly.toml app configuration file generated for moar-news on 2025-12-10T12:43:54-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "moar-news"
-primary_region = "ord"
+app = 'moar-news'
+primary_region = 'ord'
 
 [build]
 
 [env]
-  RUST_LOG = "moar_news=info,tower_http=info"
-  DATABASE_URL = "sqlite:/data/moar_news.db?mode=rwc"
+  DATABASE_URL = 'sqlite:/data/moar_news.db?mode=rwc'
+  RUST_LOG = 'moar_news=info,tower_http=info'
+
+[[mounts]]
+  source = 'moar_news_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ['app']
 
 [[vm]]
-  memory = "256mb"
-  cpu_kind = "shared"
+  memory = '256mb'
+  cpu_kind = 'shared'
   cpus = 1
-
-[mounts]
-  source = "moar_news_data"
-  destination = "/data"
+  memory_mb = 256
