@@ -157,6 +157,16 @@ body {
     letter-spacing: 0.03em;
 }
 
+.feed-title-link {
+    color: inherit;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.feed-title-link:hover {
+    color: var(--link);
+}
+
 .feed-error {
     display: inline-flex;
     align-items: center;

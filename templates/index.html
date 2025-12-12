@@ -38,7 +38,13 @@
         {% for feed_data in feeds %}
         <section class="feed-column">
             <header class="feed-header">
-                <h2>{{ feed_data.feed.name }}</h2>
+                <h2>
+                    {% if let Some(url) = feed_data.feed.homepage_url %}
+                    <a href="{{ url }}" target="_blank" rel="noopener" class="feed-title-link">{{ feed_data.feed.name }}</a>
+                    {% else %}
+                    {{ feed_data.feed.name }}
+                    {% endif %}
+                </h2>
                 {% if let Some(error) = feed_data.feed.last_error %}
                 <span class="feed-error" title="{{ error }}">!</span>
                 {% endif %}

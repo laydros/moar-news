@@ -11,6 +11,7 @@ pub struct Feed {
     pub has_discussion: bool,
     pub last_fetched: Option<String>,
     pub last_error: Option<String>,
+    pub homepage_url: Option<String>,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -47,12 +48,18 @@ impl Database {
                 url TEXT NOT NULL UNIQUE,
                 has_discussion INTEGER DEFAULT 0,
                 last_fetched TEXT,
-                last_error TEXT
+                last_error TEXT,
+                homepage_url TEXT
             )
             "#,
         )
         .execute(&self.pool)
         .await?;
+
+        // Migration: add homepage_url column if it doesn't exist
+        let _ = sqlx::query("ALTER TABLE feeds ADD COLUMN homepage_url TEXT")
+            .execute(&self.pool)
+            .await;
 
         sqlx::query(
             r#"
@@ -182,17 +189,23 @@ impl Database {
         Ok(())
     }
 
-    pub async fn update_feed_fetched(&self, feed_id: i64, error: Option<&str>) -> anyhow::Result<()> {
+    pub async fn update_feed_fetched(
+        &self,
+        feed_id: i64,
+        error: Option<&str>,
+        homepage_url: Option<&str>,
+    ) -> anyhow::Result<()> {
         let now = Utc::now().to_rfc3339();
         sqlx::query(
             r#"
             UPDATE feeds
-            SET last_fetched = ?, last_error = ?
+            SET last_fetched = ?, last_error = ?, homepage_url = COALESCE(?, homepage_url)
             WHERE id = ?
             "#,
         )
         .bind(&now)
         .bind(error)
+        .bind(homepage_url)
         .bind(feed_id)
         .execute(&self.pool)
         .await?;
@@ -609,7 +622,7 @@ mod tests {
 
             assert!(feeds[0].last_fetched.is_none());
 
-            db.update_feed_fetched(feed_id, None).await.unwrap();
+            db.update_feed_fetched(feed_id, None, None).await.unwrap();
 
             let feed = db.get_feed(feed_id).await.unwrap().unwrap();
             assert!(feed.last_fetched.is_some());
@@ -625,7 +638,7 @@ mod tests {
             let feeds = db.get_all_feeds().await.unwrap();
             let feed_id = feeds[0].id;
 
-            db.update_feed_fetched(feed_id, Some("Connection timeout"))
+            db.update_feed_fetched(feed_id, Some("Connection timeout"), None)
                 .await
                 .unwrap();
 
@@ -644,15 +657,32 @@ mod tests {
             let feed_id = feeds[0].id;
 
             // First update with error
-            db.update_feed_fetched(feed_id, Some("Error 1"))
+            db.update_feed_fetched(feed_id, Some("Error 1"), None)
                 .await
                 .unwrap();
 
             // Second update without error
-            db.update_feed_fetched(feed_id, None).await.unwrap();
+            db.update_feed_fetched(feed_id, None, None).await.unwrap();
 
             let feed = db.get_feed(feed_id).await.unwrap().unwrap();
             assert!(feed.last_error.is_none());
+        }
+
+        #[tokio::test]
+        async fn test_update_feed_fetched_with_homepage_url() {
+            let db = create_test_db().await;
+            let configs = vec![create_feed_config("Test", "https://test.com/rss", false)];
+            db.sync_feeds(&configs).await.unwrap();
+
+            let feeds = db.get_all_feeds().await.unwrap();
+            let feed_id = feeds[0].id;
+
+            db.update_feed_fetched(feed_id, None, Some("https://test.com"))
+                .await
+                .unwrap();
+
+            let feed = db.get_feed(feed_id).await.unwrap().unwrap();
+            assert_eq!(feed.homepage_url, Some("https://test.com".to_string()));
         }
     }
 }

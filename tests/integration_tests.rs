@@ -148,7 +148,7 @@ mod database_integration_tests {
         assert_eq!(page3.len(), 5); // Only 5 remaining
 
         // Test update feed fetched
-        db.update_feed_fetched(feed.id, None).await.unwrap();
+        db.update_feed_fetched(feed.id, None, None).await.unwrap();
         let updated_feed = db.get_feed(feed.id).await.unwrap().unwrap();
         assert!(updated_feed.last_fetched.is_some());
         assert!(updated_feed.last_error.is_none());
@@ -257,6 +257,7 @@ mod fetcher_integration_tests {
             has_discussion,
             last_fetched: None,
             last_error: None,
+            homepage_url: None,
         }
     }
 

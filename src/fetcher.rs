@@ -62,14 +62,20 @@ impl Fetcher {
         info!("Refreshing {} feeds", feeds.len());
 
         for feed in feeds {
-            if let Err(e) = self.refresh_feed(&feed).await {
-                error!("Failed to refresh feed '{}': {}", feed.name, e);
-                let _ = self
-                    .db
-                    .update_feed_fetched(feed.id, Some(&e.to_string()))
-                    .await;
-            } else {
-                let _ = self.db.update_feed_fetched(feed.id, None).await;
+            match self.refresh_feed(&feed).await {
+                Ok(((), homepage_url)) => {
+                    let _ = self
+                        .db
+                        .update_feed_fetched(feed.id, None, homepage_url.as_deref())
+                        .await;
+                }
+                Err(e) => {
+                    error!("Failed to refresh feed '{}': {}", feed.name, e);
+                    let _ = self
+                        .db
+                        .update_feed_fetched(feed.id, Some(&e.to_string()), None)
+                        .await;
+                }
             }
         }
 
@@ -77,7 +83,7 @@ impl Fetcher {
         Ok(())
     }
 
-    async fn refresh_feed(&self, feed: &Feed) -> anyhow::Result<()> {
+    async fn refresh_feed(&self, feed: &Feed) -> anyhow::Result<((), Option<String>)> {
         info!("Fetching feed: {} ({})", feed.name, feed.url);
 
         let response = self.client.get(&feed.url).send().await?;
@@ -87,6 +93,9 @@ impl Fetcher {
         let comments_map = Self::extract_comments_from_xml(&bytes);
 
         let parsed = parser::parse(&bytes[..])?;
+
+        // Extract homepage URL from feed metadata
+        let homepage_url = Self::extract_homepage_url(&parsed, &feed.url);
 
         let mut count = 0;
         for entry in parsed.entries {
@@ -135,7 +144,43 @@ impl Fetcher {
         }
 
         info!("Added/updated {} items for feed '{}'", count, feed.name);
-        Ok(())
+        Ok(((), homepage_url))
+    }
+
+    /// Extract the homepage URL from feed metadata.
+    /// For most feeds, we look for rel="alternate" links.
+    /// For Daring Fireball, we use rel="related" since that points to the actual site.
+    pub fn extract_homepage_url(feed: &feed_rs::model::Feed, feed_url: &str) -> Option<String> {
+        let is_daring_fireball = feed_url.contains("daringfireball.net");
+
+        // For Daring Fireball, prefer rel="related" links
+        if is_daring_fireball {
+            for link in &feed.links {
+                let rel = link.rel.as_deref().unwrap_or("");
+                if rel == "related" {
+                    return Some(link.href.clone());
+                }
+            }
+        }
+
+        // For all feeds, look for rel="alternate" (the standard homepage link)
+        for link in &feed.links {
+            let rel = link.rel.as_deref().unwrap_or("");
+            if rel == "alternate" {
+                return Some(link.href.clone());
+            }
+        }
+
+        // Fallback: use the first link if no explicit alternate is found
+        // (RSS 2.0 channel <link> becomes a link with no rel attribute)
+        for link in &feed.links {
+            if link.rel.is_none() || link.rel.as_deref() == Some("") {
+                return Some(link.href.clone());
+            }
+        }
+
+        // Last resort: just use the first link
+        feed.links.first().map(|l| l.href.clone())
     }
 
     /// Extract <comments> URLs from raw RSS XML since feed_rs doesn't parse them
@@ -253,6 +298,7 @@ mod tests {
             has_discussion,
             last_fetched: None,
             last_error: None,
+            homepage_url: None,
         }
     }
 
@@ -630,6 +676,108 @@ mod tests {
                 result,
                 Some("https://blog.example.com/post/1/comments".to_string())
             );
+        }
+    }
+
+    // Tests for extract_homepage_url
+    mod extract_homepage_url_tests {
+        use super::*;
+        use feed_rs::model::Feed as ParsedFeed;
+
+        fn create_parsed_feed_with_links(links: Vec<(&str, Option<&str>)>) -> ParsedFeed {
+            ParsedFeed {
+                id: "test-feed".to_string(),
+                feed_type: feed_rs::model::FeedType::RSS2,
+                title: None,
+                updated: None,
+                authors: vec![],
+                description: None,
+                links: links
+                    .into_iter()
+                    .map(|(href, rel)| Link {
+                        href: href.to_string(),
+                        rel: rel.map(|r| r.to_string()),
+                        media_type: None,
+                        href_lang: None,
+                        title: None,
+                        length: None,
+                    })
+                    .collect(),
+                categories: vec![],
+                contributors: vec![],
+                generator: None,
+                icon: None,
+                language: None,
+                logo: None,
+                published: None,
+                rating: None,
+                rights: None,
+                ttl: None,
+                entries: vec![],
+            }
+        }
+
+        #[test]
+        fn test_extract_alternate_link() {
+            let feed = create_parsed_feed_with_links(vec![
+                ("https://example.com/feed", Some("self")),
+                ("https://example.com", Some("alternate")),
+            ]);
+
+            let result = Fetcher::extract_homepage_url(&feed, "https://example.com/rss");
+            assert_eq!(result, Some("https://example.com".to_string()));
+        }
+
+        #[test]
+        fn test_extract_link_without_rel() {
+            let feed = create_parsed_feed_with_links(vec![
+                ("https://example.com", None),
+            ]);
+
+            let result = Fetcher::extract_homepage_url(&feed, "https://example.com/rss");
+            assert_eq!(result, Some("https://example.com".to_string()));
+        }
+
+        #[test]
+        fn test_daring_fireball_uses_related() {
+            let feed = create_parsed_feed_with_links(vec![
+                ("https://daringfireball.net/feeds/main", Some("self")),
+                ("https://daringfireball.net/linked/2024", Some("alternate")),
+                ("https://daringfireball.net", Some("related")),
+            ]);
+
+            let result = Fetcher::extract_homepage_url(&feed, "https://daringfireball.net/feeds/main");
+            assert_eq!(result, Some("https://daringfireball.net".to_string()));
+        }
+
+        #[test]
+        fn test_non_daring_fireball_ignores_related() {
+            let feed = create_parsed_feed_with_links(vec![
+                ("https://example.com/feed", Some("self")),
+                ("https://example.com", Some("alternate")),
+                ("https://sponsor.com", Some("related")),
+            ]);
+
+            let result = Fetcher::extract_homepage_url(&feed, "https://example.com/rss");
+            assert_eq!(result, Some("https://example.com".to_string()));
+        }
+
+        #[test]
+        fn test_fallback_to_first_link() {
+            let feed = create_parsed_feed_with_links(vec![
+                ("https://example.com/feed", Some("self")),
+            ]);
+
+            let result = Fetcher::extract_homepage_url(&feed, "https://example.com/rss");
+            assert_eq!(result, Some("https://example.com/feed".to_string()));
+        }
+
+        #[test]
+        fn test_empty_links() {
+            let feed = create_parsed_feed_with_links(vec![]);
+
+            let result = Fetcher::extract_homepage_url(&feed, "https://example.com/rss");
+            assert_eq!(result, None);
         }
     }
 }
