@@ -23,6 +23,9 @@
             Moar News
         </h1>
         <div id="refresh-container">
+            {% if let Some(updated) = last_updated %}
+            <span class="last-updated">Updated {{ updated }}</span>
+            {% endif %}
             <button
                 hx-post="/refresh"
                 hx-target="#refresh-container"

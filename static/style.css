@@ -121,6 +121,18 @@ body {
     50% { opacity: 1; }
 }
 
+/* Last updated timestamp */
+.last-updated {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-right: 0.75rem;
+}
+
+#refresh-container {
+    display: flex;
+    align-items: center;
+}
+
 /* Main feed grid - 3 columns on desktop */
 .feeds-grid {
     display: grid;

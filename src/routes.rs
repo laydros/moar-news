@@ -25,6 +25,7 @@ pub struct IndexTemplate {
     pub feeds: Vec<FeedWithItems>,
     pub version: &'static str,
     pub repo_url: &'static str,
+    pub last_updated: Option<String>,
 }
 
 pub struct FeedWithItems {
@@ -89,6 +90,17 @@ pub async fn index(
 ) -> Result<impl IntoResponse, AppError> {
     let feeds = state.db.get_all_feeds().await?;
 
+    // Find the most recent last_fetched timestamp and format it for display
+    let last_updated = feeds
+        .iter()
+        .filter_map(|f| f.last_fetched.as_ref())
+        .max()
+        .and_then(|ts| {
+            chrono::DateTime::parse_from_rfc3339(ts)
+                .ok()
+                .map(|dt| dt.format("%b %d, %H:%M").to_string())
+        });
+
     let mut feeds_with_items = Vec::new();
     for feed in feeds {
         let items = state
@@ -109,6 +121,7 @@ pub async fn index(
         feeds: feeds_with_items,
         version: env!("CARGO_PKG_VERSION"),
         repo_url: "https://github.com/laydros/moar-news",
+        last_updated,
     }))
 }
 
