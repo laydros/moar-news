@@ -90,16 +90,12 @@ pub async fn index(
 ) -> Result<impl IntoResponse, AppError> {
     let feeds = state.db.get_all_feeds().await?;
 
-    // Find the most recent last_fetched timestamp and format it for display
+    // Find the most recent last_fetched timestamp (pass raw ISO for client-side formatting)
     let last_updated = feeds
         .iter()
         .filter_map(|f| f.last_fetched.as_ref())
         .max()
-        .and_then(|ts| {
-            chrono::DateTime::parse_from_rfc3339(ts)
-                .ok()
-                .map(|dt| dt.format("%b %d, %H:%M").to_string())
-        });
+        .cloned();
 
     let mut feeds_with_items = Vec::new();
     for feed in feeds {

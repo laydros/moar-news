@@ -24,7 +24,7 @@
         </h1>
         <div id="refresh-container">
             {% if let Some(updated) = last_updated %}
-            <span class="last-updated">Updated {{ updated }}</span>
+            <span class="last-updated" data-timestamp="{{ updated }}"></span>
             {% endif %}
             <button
                 hx-post="/refresh"
@@ -115,6 +115,20 @@
                 btn.dataset.expanded = 'true';
             }
         }
+
+        // Format timestamp in user's local timezone
+        document.querySelectorAll('.last-updated[data-timestamp]').forEach(el => {
+            const ts = el.dataset.timestamp;
+            if (ts) {
+                const date = new Date(ts);
+                const formatted = date.toLocaleDateString(undefined, {
+                    month: 'short', day: 'numeric'
+                }) + ', ' + date.toLocaleTimeString(undefined, {
+                    hour: '2-digit', minute: '2-digit'
+                });
+                el.textContent = 'Updated ' + formatted;
+            }
+        });
     </script>
 </body>
 </html>
