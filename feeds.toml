@@ -3,13 +3,13 @@
 refresh_interval = 15
 
 [[feeds]]
-name = "Hacker News"
-url = "https://news.ycombinator.com/rss"
+name = "Lobste.rs"
+url = "https://lobste.rs/rss"
 has_discussion = true
 
 [[feeds]]
-name = "Lobste.rs"
-url = "https://lobste.rs/rss"
+name = "Hacker News"
+url = "https://news.ycombinator.com/rss"
 has_discussion = true
 
 [[feeds]]
