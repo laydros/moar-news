@@ -322,13 +322,17 @@ body {
     }
 
     .feed-column {
+        display: block;
         max-height: none;
     }
 
+    .feed-content {
+        display: block;
+    }
+
     .items-list {
-        max-height: 550px;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
+        overflow-y: visible;
+        max-height: none;
     }
 
     .load-more-btn {
