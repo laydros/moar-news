@@ -25,6 +25,8 @@
         <div id="refresh-container">
             {% if let Some(updated) = last_updated %}
             <span class="last-updated" data-timestamp="{{ updated }}"></span>
+            {% else %}
+            <span class="last-updated"></span>
             {% endif %}
             <button
                 hx-post="/refresh"
@@ -116,17 +118,58 @@
             }
         }
 
-        // Format timestamp in user's local timezone
-        document.querySelectorAll('.last-updated[data-timestamp]').forEach(el => {
-            const ts = el.dataset.timestamp;
-            if (ts) {
-                const date = new Date(ts);
-                const formatted = date.toLocaleDateString(undefined, {
-                    month: 'short', day: 'numeric'
-                }) + ', ' + date.toLocaleTimeString(undefined, {
-                    hour: '2-digit', minute: '2-digit'
-                });
+        const LAST_UPDATED_KEY = 'moar-news:last-updated';
+
+        function formatUpdatedTimestamp(ts) {
+            const date = new Date(ts);
+            if (Number.isNaN(date.getTime())) return null;
+
+            return date.toLocaleDateString(undefined, {
+                month: 'short', day: 'numeric'
+            }) + ', ' + date.toLocaleTimeString(undefined, {
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+
+        function getStoredLastUpdated() {
+            try {
+                return localStorage.getItem(LAST_UPDATED_KEY);
+            } catch {
+                return null;
+            }
+        }
+
+        function setStoredLastUpdated(ts) {
+            try {
+                localStorage.setItem(LAST_UPDATED_KEY, ts);
+            } catch {
+                // Ignore storage failures (private mode, disabled storage, etc.)
+            }
+        }
+
+        function renderLastUpdated(root = document) {
+            const stored = getStoredLastUpdated();
+            root.querySelectorAll('.last-updated').forEach(el => {
+                const ts = el.dataset.timestamp || stored;
+                if (!ts) {
+                    el.textContent = '';
+                    return;
+                }
+
+                const formatted = formatUpdatedTimestamp(ts);
+                if (!formatted) return;
+
+                el.dataset.timestamp = ts;
                 el.textContent = 'Updated ' + formatted;
+                setStoredLastUpdated(ts);
+            });
+        }
+
+        renderLastUpdated();
+
+        document.body.addEventListener('htmx:afterSwap', event => {
+            if (event.target instanceof Element) {
+                renderLastUpdated(event.target);
             }
         });
     </script>

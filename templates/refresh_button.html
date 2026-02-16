@@ -1,4 +1,9 @@
 {% if refreshing %}
+{% if let Some(updated) = last_updated %}
+<span class="last-updated" data-timestamp="{{ updated }}"></span>
+{% else %}
+<span class="last-updated"></span>
+{% endif %}
 <button
     hx-get="/refresh/status"
     hx-target="#refresh-container"
@@ -10,6 +15,11 @@
     Refreshing...
 </button>
 {% else %}
+{% if let Some(updated) = last_updated %}
+<span class="last-updated" data-timestamp="{{ updated }}"></span>
+{% else %}
+<span class="last-updated"></span>
+{% endif %}
 <button
     hx-post="/refresh"
     hx-target="#refresh-container"

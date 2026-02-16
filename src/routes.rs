@@ -3,7 +3,7 @@ use std::sync::Arc;
 use askama::Template;
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderValue, StatusCode},
     response::{Html, IntoResponse, Response},
 };
 use serde::Deserialize;
@@ -47,6 +47,16 @@ pub struct FeedItemsTemplate {
 #[template(path = "refresh_button.html")]
 pub struct RefreshButtonTemplate {
     pub refreshing: bool,
+    pub last_updated: Option<String>,
+}
+
+async fn get_last_updated(db: &Database) -> Result<Option<String>, AppError> {
+    let feeds = db.get_all_feeds().await?;
+    Ok(feeds
+        .iter()
+        .filter_map(|f| f.last_fetched.as_ref())
+        .max()
+        .cloned())
 }
 
 // Wrapper for HTML responses
@@ -157,6 +167,8 @@ pub async fn feed_more(
 pub async fn refresh(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let last_updated = get_last_updated(&state.db).await?;
+
     // Spawn the refresh task
     let fetcher = state.fetcher.clone();
     tokio::spawn(async move {
@@ -164,14 +176,31 @@ pub async fn refresh(
     });
 
     // Return refreshing state immediately
-    Ok(HtmlTemplate(RefreshButtonTemplate { refreshing: true }))
+    Ok(HtmlTemplate(RefreshButtonTemplate {
+        refreshing: true,
+        last_updated,
+    }))
 }
 
 pub async fn refresh_status(
     State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     let refreshing = state.fetcher.is_refreshing().await;
-    Ok(HtmlTemplate(RefreshButtonTemplate { refreshing }))
+    let last_updated = get_last_updated(&state.db).await?;
+
+    let mut response = HtmlTemplate(RefreshButtonTemplate {
+        refreshing,
+        last_updated,
+    })
+    .into_response();
+
+    if !refreshing {
+        response
+            .headers_mut()
+            .insert("HX-Refresh", HeaderValue::from_static("true"));
+    }
+
+    Ok(response)
 }
 
 pub async fn health() -> impl IntoResponse {
