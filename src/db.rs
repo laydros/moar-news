@@ -113,6 +113,26 @@ impl Database {
             .execute(&self.pool)
             .await?;
         }
+
+        // Remove feeds no longer in the config
+        let valid_urls: Vec<&str> = configs.iter().map(|c| c.url.as_str()).collect();
+        let all_feeds =
+            sqlx::query_as::<_, (i64, String)>("SELECT id, url FROM feeds")
+                .fetch_all(&self.pool)
+                .await?;
+        for (feed_id, url) in all_feeds {
+            if !valid_urls.contains(&url.as_str()) {
+                sqlx::query("DELETE FROM items WHERE feed_id = ?")
+                    .bind(feed_id)
+                    .execute(&self.pool)
+                    .await?;
+                sqlx::query("DELETE FROM feeds WHERE id = ?")
+                    .bind(feed_id)
+                    .execute(&self.pool)
+                    .await?;
+            }
+        }
+
         Ok(())
     }
 
@@ -324,6 +344,35 @@ mod tests {
             assert_eq!(feeds[0].url, "https://feed3.com/rss");
             assert_eq!(feeds[1].url, "https://feed1.com/rss");
             assert_eq!(feeds[2].url, "https://feed2.com/rss");
+        }
+
+        #[tokio::test]
+        async fn test_sync_removes_stale_feeds() {
+            let db = create_test_db().await;
+
+            let initial_configs = vec![
+                create_feed_config("Feed 1", "https://feed1.com/rss", false),
+                create_feed_config("Feed 2", "https://feed2.com/rss", false),
+            ];
+            db.sync_feeds(&initial_configs).await.unwrap();
+
+            // Add items to Feed 2
+            let feeds = db.get_all_feeds().await.unwrap();
+            let feed2_id = feeds.iter().find(|f| f.url == "https://feed2.com/rss").unwrap().id;
+            db.upsert_item(feed2_id, "guid-1", "Title 1", "https://a.com", None, None)
+                .await
+                .unwrap();
+
+            // Re-sync with only Feed 1 — Feed 2 should be removed along with its items
+            let reduced_configs = vec![create_feed_config("Feed 1", "https://feed1.com/rss", false)];
+            db.sync_feeds(&reduced_configs).await.unwrap();
+
+            let feeds = db.get_all_feeds().await.unwrap();
+            assert_eq!(feeds.len(), 1);
+            assert_eq!(feeds[0].url, "https://feed1.com/rss");
+
+            let items = db.get_items_for_feed(feed2_id, 10, 0).await.unwrap();
+            assert!(items.is_empty());
         }
 
         #[tokio::test]
