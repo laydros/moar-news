@@ -1,24 +1,55 @@
+# Moar News - RSS Feed Configuration
+# Refresh interval in minutes
+refresh_interval = 15
+
 [[feeds]]
 position = 1
 name = "Lobste.rs"
-url = "https://lobste.rs"
+url = "https://lobste.rs/rss"
+has_discussion = true
 
 [[feeds]]
 position = 2
 name = "Hacker News"
-url = "https://news.ycombinator.com"
+url = "https://news.ycombinator.com/rss"
+has_discussion = true
 
 [[feeds]]
 position = 3
-name = "Reddit"
-url = "https://www.reddit.com"
+name = "Daring Fireball"
+url = "https://daringfireball.net/feeds/main"
 
 [[feeds]]
 position = 4
-name = "Feedly"
-url = "https://feedly.com"
+name = "Ars Technica"
+url = "https://feeds.arstechnica.com/arstechnica/index"
 
 [[feeds]]
 position = 5
-name = "TechCrunch"
-url = "https://techcrunch.com"
+name = "The Register"
+url = "https://www.theregister.com/headlines.atom"
+
+[[feeds]]
+position = 6
+name = "MacRumors"
+url = "https://feeds.macrumors.com/MacRumors-All"
+
+[[feeds]]
+position = 7
+name = "The Verge"
+url = "https://www.theverge.com/rss/index.xml"
+
+[[feeds]]
+position = 8
+name = "Liliputing"
+url = "https://liliputing.com/feed/"
+
+[[feeds]]
+position = 9
+name = "NPR News"
+url = "https://feeds.npr.org/1001/rss.xml"
+
+[[feeds]]
+position = 10
+name = "Soylent News"
+url = "https://soylentnews.org/index.rss"
