@@ -46,6 +46,7 @@ impl Database {
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 url TEXT NOT NULL UNIQUE,
+                display_order INTEGER NOT NULL DEFAULT 0,
                 has_discussion INTEGER DEFAULT 0,
                 last_fetched TEXT,
                 last_error TEXT,
@@ -58,6 +59,9 @@ impl Database {
 
         // Migration: add homepage_url column if it doesn't exist
         let _ = sqlx::query("ALTER TABLE feeds ADD COLUMN homepage_url TEXT")
+            .execute(&self.pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE feeds ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0")
             .execute(&self.pool)
             .await;
 
@@ -91,18 +95,20 @@ impl Database {
     }
 
     pub async fn sync_feeds(&self, configs: &[FeedConfig]) -> anyhow::Result<()> {
-        for config in configs {
+        for (index, config) in configs.iter().enumerate() {
             sqlx::query(
                 r#"
-                INSERT INTO feeds (name, url, has_discussion)
-                VALUES (?, ?, ?)
+                INSERT INTO feeds (name, url, display_order, has_discussion)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(url) DO UPDATE SET
                     name = excluded.name,
+                    display_order = excluded.display_order,
                     has_discussion = excluded.has_discussion
                 "#,
             )
             .bind(&config.name)
             .bind(&config.url)
+            .bind(index as i64)
             .bind(config.has_discussion)
             .execute(&self.pool)
             .await?;
@@ -111,7 +117,7 @@ impl Database {
     }
 
     pub async fn get_all_feeds(&self) -> anyhow::Result<Vec<Feed>> {
-        let feeds = sqlx::query_as::<_, Feed>("SELECT * FROM feeds ORDER BY id")
+        let feeds = sqlx::query_as::<_, Feed>("SELECT * FROM feeds ORDER BY display_order, id")
             .fetch_all(&self.pool)
             .await?;
         Ok(feeds)
@@ -294,6 +300,30 @@ mod tests {
 
             let feeds = db.get_all_feeds().await.unwrap();
             assert_eq!(feeds.len(), 3);
+        }
+
+        #[tokio::test]
+        async fn test_sync_reorders_existing_feeds_from_config_order() {
+            let db = create_test_db().await;
+
+            let initial_configs = vec![
+                create_feed_config("Feed 1", "https://feed1.com/rss", true),
+                create_feed_config("Feed 2", "https://feed2.com/rss", false),
+                create_feed_config("Feed 3", "https://feed3.com/rss", true),
+            ];
+            db.sync_feeds(&initial_configs).await.unwrap();
+
+            let reordered_configs = vec![
+                create_feed_config("Feed 3", "https://feed3.com/rss", true),
+                create_feed_config("Feed 1", "https://feed1.com/rss", true),
+                create_feed_config("Feed 2", "https://feed2.com/rss", false),
+            ];
+            db.sync_feeds(&reordered_configs).await.unwrap();
+
+            let feeds = db.get_all_feeds().await.unwrap();
+            assert_eq!(feeds[0].url, "https://feed3.com/rss");
+            assert_eq!(feeds[1].url, "https://feed1.com/rss");
+            assert_eq!(feeds[2].url, "https://feed2.com/rss");
         }
 
         #[tokio::test]
