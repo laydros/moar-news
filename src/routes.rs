@@ -95,9 +95,7 @@ impl<E: Into<anyhow::Error>> From<E> for AppError {
 }
 
 // Route handlers
-pub async fn index(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn index(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, AppError> {
     let feeds = state.db.get_all_feeds().await?;
 
     // Find the most recent last_fetched timestamp (pass raw ISO for client-side formatting)
@@ -164,9 +162,7 @@ pub async fn feed_more(
     }))
 }
 
-pub async fn refresh(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn refresh(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, AppError> {
     let last_updated = get_last_updated(&state.db).await?;
 
     // Spawn the refresh task
@@ -182,9 +178,7 @@ pub async fn refresh(
     }))
 }
 
-pub async fn refresh_status(
-    State(state): State<Arc<AppState>>,
-) -> Result<Response, AppError> {
+pub async fn refresh_status(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
     let refreshing = state.fetcher.is_refreshing().await;
     let last_updated = get_last_updated(&state.db).await?;
 
@@ -283,7 +277,12 @@ mod tests {
             let (app, _db) = create_test_app().await;
 
             let response = app
-                .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+                .oneshot(
+                    Request::builder()
+                        .uri("/health")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
                 .await
                 .unwrap();
 

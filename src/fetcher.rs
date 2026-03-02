@@ -124,10 +124,8 @@ impl Fetcher {
                 Self::extract_discussion_link(feed, &entry, comments_map.get(&link), &link);
 
             // Get published date
-            let published: Option<DateTime<Utc>> = entry
-                .published
-                .or(entry.updated)
-                .map(|dt| dt.into());
+            let published: Option<DateTime<Utc>> =
+                entry.published.or(entry.updated).map(|dt| dt.into());
 
             self.db
                 .upsert_item(
@@ -510,24 +508,25 @@ mod tests {
             let feed = create_test_feed("Blog", "https://blog.example.com", false);
             let entry = create_test_entry("123", vec![("https://article.com", None)]);
 
-            let result = Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.com");
+            let result =
+                Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.com");
             assert_eq!(result, None);
         }
 
         #[test]
         fn test_hn_discussion_link_from_entry_id() {
-            let feed = create_test_feed(
-                "Hacker News",
-                "https://news.ycombinator.com/rss",
-                true,
-            );
+            let feed = create_test_feed("Hacker News", "https://news.ycombinator.com/rss", true);
             let entry = create_test_entry(
                 "https://news.ycombinator.com/item?id=12345",
                 vec![("https://article.example.com", None)],
             );
 
-            let result =
-                Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.example.com");
+            let result = Fetcher::extract_discussion_link(
+                &feed,
+                &entry,
+                None,
+                "https://article.example.com",
+            );
             assert_eq!(
                 result,
                 Some("https://news.ycombinator.com/item?id=12345".to_string())
@@ -536,11 +535,7 @@ mod tests {
 
         #[test]
         fn test_hn_skip_when_main_link_is_discussion() {
-            let feed = create_test_feed(
-                "Hacker News",
-                "https://news.ycombinator.com/rss",
-                true,
-            );
+            let feed = create_test_feed("Hacker News", "https://news.ycombinator.com/rss", true);
             // Ask HN posts where the main link IS the discussion
             let entry = create_test_entry(
                 "https://news.ycombinator.com/item?id=12345",
@@ -564,8 +559,12 @@ mod tests {
                 vec![("https://article.example.com", None)],
             );
 
-            let result =
-                Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.example.com");
+            let result = Fetcher::extract_discussion_link(
+                &feed,
+                &entry,
+                None,
+                "https://article.example.com",
+            );
             assert_eq!(result, Some("https://lobste.rs/s/abc123".to_string()));
         }
 
@@ -591,11 +590,15 @@ mod tests {
                 "123",
                 vec![
                     ("https://article.com", None),
-                    ("https://forum.example.com/topic/123/replies", Some("replies")),
+                    (
+                        "https://forum.example.com/topic/123/replies",
+                        Some("replies"),
+                    ),
                 ],
             );
 
-            let result = Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.com");
+            let result =
+                Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.com");
             assert_eq!(
                 result,
                 Some("https://forum.example.com/topic/123/replies".to_string())
@@ -630,7 +633,8 @@ mod tests {
             let feed = create_test_feed("Blog", "https://blog.example.com/feed", true);
             let entry = create_test_entry("123", vec![("https://article.com", None)]);
 
-            let result = Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.com");
+            let result =
+                Fetcher::extract_discussion_link(&feed, &entry, None, "https://article.com");
             assert_eq!(result, None);
         }
 
@@ -730,9 +734,7 @@ mod tests {
 
         #[test]
         fn test_extract_link_without_rel() {
-            let feed = create_parsed_feed_with_links(vec![
-                ("https://example.com", None),
-            ]);
+            let feed = create_parsed_feed_with_links(vec![("https://example.com", None)]);
 
             let result = Fetcher::extract_homepage_url(&feed, "https://example.com/rss");
             assert_eq!(result, Some("https://example.com".to_string()));
@@ -746,7 +748,8 @@ mod tests {
                 ("https://daringfireball.net", Some("related")),
             ]);
 
-            let result = Fetcher::extract_homepage_url(&feed, "https://daringfireball.net/feeds/main");
+            let result =
+                Fetcher::extract_homepage_url(&feed, "https://daringfireball.net/feeds/main");
             assert_eq!(result, Some("https://daringfireball.net".to_string()));
         }
 
@@ -764,9 +767,8 @@ mod tests {
 
         #[test]
         fn test_fallback_to_first_link() {
-            let feed = create_parsed_feed_with_links(vec![
-                ("https://example.com/feed", Some("self")),
-            ]);
+            let feed =
+                create_parsed_feed_with_links(vec![("https://example.com/feed", Some("self"))]);
 
             let result = Fetcher::extract_homepage_url(&feed, "https://example.com/rss");
             assert_eq!(result, Some("https://example.com/feed".to_string()));

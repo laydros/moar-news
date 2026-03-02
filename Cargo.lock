@@ -1293,7 +1293,7 @@ dependencies = [
 
 [[package]]
 name = "moar-news"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "askama",

@@ -33,11 +33,21 @@ mod config_integration_tests {
     fn test_load_actual_feeds_config() {
         // Test loading the actual feeds.toml from the project
         let config = Config::load("feeds.toml");
-        assert!(config.is_ok(), "Failed to load feeds.toml: {:?}", config.err());
+        assert!(
+            config.is_ok(),
+            "Failed to load feeds.toml: {:?}",
+            config.err()
+        );
 
         let config = config.unwrap();
-        assert!(!config.feeds.is_empty(), "feeds.toml should have at least one feed");
-        assert!(config.refresh_interval > 0, "refresh_interval should be positive");
+        assert!(
+            !config.feeds.is_empty(),
+            "feeds.toml should have at least one feed"
+        );
+        assert!(
+            config.refresh_interval > 0,
+            "refresh_interval should be positive"
+        );
     }
 
     #[test]
@@ -99,13 +109,11 @@ mod database_integration_tests {
         db.initialize().await.unwrap();
 
         // Sync feeds
-        let configs = vec![
-            FeedConfig {
-                name: "Test Feed".to_string(),
-                url: "https://test.com/rss".to_string(),
-                has_discussion: true,
-            },
-        ];
+        let configs = vec![FeedConfig {
+            name: "Test Feed".to_string(),
+            url: "https://test.com/rss".to_string(),
+            has_discussion: true,
+        }];
         db.sync_feeds(&configs).await.unwrap();
 
         // Verify feed was created
@@ -320,7 +328,10 @@ mod fetcher_integration_tests {
         // HN entry format: guid is the discussion URL
         let hn_entry = Entry {
             id: "https://news.ycombinator.com/item?id=42345678".to_string(),
-            links: vec![create_link("https://external-article.com/cool-article", None)],
+            links: vec![create_link(
+                "https://external-article.com/cool-article",
+                None,
+            )],
             ..Default::default()
         };
 
@@ -356,10 +367,7 @@ mod fetcher_integration_tests {
             "https://blog.example.com/post",
         );
 
-        assert_eq!(
-            discussion,
-            Some("https://lobste.rs/s/abc123".to_string())
-        );
+        assert_eq!(discussion, Some("https://lobste.rs/s/abc123".to_string()));
     }
 
     #[test]

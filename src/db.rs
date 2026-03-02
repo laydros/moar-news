@@ -61,9 +61,10 @@ impl Database {
         let _ = sqlx::query("ALTER TABLE feeds ADD COLUMN homepage_url TEXT")
             .execute(&self.pool)
             .await;
-        let _ = sqlx::query("ALTER TABLE feeds ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0")
-            .execute(&self.pool)
-            .await;
+        let _ =
+            sqlx::query("ALTER TABLE feeds ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0")
+                .execute(&self.pool)
+                .await;
 
         sqlx::query(
             r#"
@@ -116,10 +117,9 @@ impl Database {
 
         // Remove feeds no longer in the config
         let valid_urls: Vec<&str> = configs.iter().map(|c| c.url.as_str()).collect();
-        let all_feeds =
-            sqlx::query_as::<_, (i64, String)>("SELECT id, url FROM feeds")
-                .fetch_all(&self.pool)
-                .await?;
+        let all_feeds = sqlx::query_as::<_, (i64, String)>("SELECT id, url FROM feeds")
+            .fetch_all(&self.pool)
+            .await?;
         for (feed_id, url) in all_feeds {
             if !valid_urls.contains(&url.as_str()) {
                 sqlx::query("DELETE FROM items WHERE feed_id = ?")
@@ -159,8 +159,32 @@ impl Database {
     ) -> anyhow::Result<Vec<Item>> {
         let items = sqlx::query_as::<_, Item>(
             r#"
-            SELECT * FROM items
-            WHERE feed_id = ?
+            WITH ranked_items AS (
+                SELECT
+                    id,
+                    feed_id,
+                    guid,
+                    title,
+                    link,
+                    discussion_link,
+                    published,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY link
+                        ORDER BY published DESC NULLS LAST, id DESC
+                    ) AS row_num
+                FROM items
+                WHERE feed_id = ?
+            )
+            SELECT
+                id,
+                feed_id,
+                guid,
+                title,
+                link,
+                discussion_link,
+                published
+            FROM ranked_items
+            WHERE row_num = 1
             ORDER BY published DESC NULLS LAST, id DESC
             LIMIT ? OFFSET ?
             "#,
@@ -174,10 +198,20 @@ impl Database {
     }
 
     pub async fn get_item_count_for_feed(&self, feed_id: i64) -> anyhow::Result<i64> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM items WHERE feed_id = ?")
-            .bind(feed_id)
-            .fetch_one(&self.pool)
-            .await?;
+        let count: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*)
+            FROM (
+                SELECT link
+                FROM items
+                WHERE feed_id = ?
+                GROUP BY link
+            )
+            "#,
+        )
+        .bind(feed_id)
+        .fetch_one(&self.pool)
+        .await?;
         Ok(count.0)
     }
 
@@ -191,6 +225,38 @@ impl Database {
         published: Option<DateTime<Utc>>,
     ) -> anyhow::Result<()> {
         let published_str = published.map(|p| p.to_rfc3339());
+
+        let existing_item_id: Option<(i64,)> = sqlx::query_as(
+            r#"
+            SELECT id
+            FROM items
+            WHERE feed_id = ? AND link = ?
+            ORDER BY published DESC NULLS LAST, id DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(feed_id)
+        .bind(link)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some((item_id,)) = existing_item_id {
+            sqlx::query(
+                r#"
+                UPDATE items
+                SET title = ?, discussion_link = ?, published = ?
+                WHERE id = ?
+                "#,
+            )
+            .bind(title)
+            .bind(discussion_link)
+            .bind(published_str)
+            .bind(item_id)
+            .execute(&self.pool)
+            .await?;
+
+            return Ok(());
+        }
 
         sqlx::query(
             r#"
@@ -358,13 +424,18 @@ mod tests {
 
             // Add items to Feed 2
             let feeds = db.get_all_feeds().await.unwrap();
-            let feed2_id = feeds.iter().find(|f| f.url == "https://feed2.com/rss").unwrap().id;
+            let feed2_id = feeds
+                .iter()
+                .find(|f| f.url == "https://feed2.com/rss")
+                .unwrap()
+                .id;
             db.upsert_item(feed2_id, "guid-1", "Title 1", "https://a.com", None, None)
                 .await
                 .unwrap();
 
             // Re-sync with only Feed 1 — Feed 2 should be removed along with its items
-            let reduced_configs = vec![create_feed_config("Feed 1", "https://feed1.com/rss", false)];
+            let reduced_configs =
+                vec![create_feed_config("Feed 1", "https://feed1.com/rss", false)];
             db.sync_feeds(&reduced_configs).await.unwrap();
 
             let feeds = db.get_all_feeds().await.unwrap();
@@ -576,12 +647,26 @@ mod tests {
             let feeds = db.get_all_feeds().await.unwrap();
 
             // Same GUID in different feeds should create separate items
-            db.upsert_item(feeds[0].id, "guid-123", "Title 1", "https://a.com", None, None)
-                .await
-                .unwrap();
-            db.upsert_item(feeds[1].id, "guid-123", "Title 2", "https://b.com", None, None)
-                .await
-                .unwrap();
+            db.upsert_item(
+                feeds[0].id,
+                "guid-123",
+                "Title 1",
+                "https://a.com",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+            db.upsert_item(
+                feeds[1].id,
+                "guid-123",
+                "Title 2",
+                "https://b.com",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
 
             let items1 = db.get_items_for_feed(feeds[0].id, 10, 0).await.unwrap();
             let items2 = db.get_items_for_feed(feeds[1].id, 10, 0).await.unwrap();
@@ -590,6 +675,47 @@ mod tests {
             assert_eq!(items2.len(), 1);
             assert_eq!(items1[0].title, "Title 1");
             assert_eq!(items2[0].title, "Title 2");
+        }
+
+        #[tokio::test]
+        async fn test_same_link_different_guid_updates_existing_item() {
+            let db = create_test_db().await;
+            let configs = vec![create_feed_config("Test", "https://test.com/rss", false)];
+            db.sync_feeds(&configs).await.unwrap();
+
+            let feeds = db.get_all_feeds().await.unwrap();
+            let feed_id = feeds[0].id;
+
+            db.upsert_item(
+                feed_id,
+                "guid-123",
+                "Original Title",
+                "https://article.com",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+            db.upsert_item(
+                feed_id,
+                "guid-456",
+                "Updated Title",
+                "https://article.com",
+                Some("https://comments.com"),
+                Some(Utc::now()),
+            )
+            .await
+            .unwrap();
+
+            let items = db.get_items_for_feed(feed_id, 10, 0).await.unwrap();
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0].guid, "guid-123");
+            assert_eq!(items[0].title, "Updated Title");
+            assert_eq!(
+                items[0].discussion_link,
+                Some("https://comments.com".to_string())
+            );
         }
     }
 
@@ -683,6 +809,57 @@ mod tests {
             // Most recent should be first (Title 5 has the most recent timestamp)
             assert_eq!(items[0].title, "Title 5");
             assert_eq!(items[4].title, "Title 1");
+        }
+
+        #[tokio::test]
+        async fn test_get_items_deduplicates_existing_duplicate_links() {
+            let db = create_test_db().await;
+            let configs = vec![create_feed_config("Test", "https://test.com/rss", false)];
+            db.sync_feeds(&configs).await.unwrap();
+
+            let feeds = db.get_all_feeds().await.unwrap();
+            let feed_id = feeds[0].id;
+            let older = (Utc::now() - chrono::Duration::hours(1)).to_rfc3339();
+            let newer = Utc::now().to_rfc3339();
+
+            sqlx::query(
+                r#"
+                INSERT INTO items (feed_id, guid, title, link, discussion_link, published)
+                VALUES (?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(feed_id)
+            .bind("guid-1")
+            .bind("Older")
+            .bind("https://article.com")
+            .bind(None::<&str>)
+            .bind(&older)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+            sqlx::query(
+                r#"
+                INSERT INTO items (feed_id, guid, title, link, discussion_link, published)
+                VALUES (?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(feed_id)
+            .bind("guid-2")
+            .bind("Newer")
+            .bind("https://article.com")
+            .bind(None::<&str>)
+            .bind(&newer)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+            let items = db.get_items_for_feed(feed_id, 10, 0).await.unwrap();
+            let count = db.get_item_count_for_feed(feed_id).await.unwrap();
+
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0].title, "Newer");
+            assert_eq!(count, 1);
         }
     }
 
