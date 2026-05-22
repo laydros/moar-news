@@ -16,28 +16,28 @@ has_discussion = true
 
 [[feeds]]
 position = 3
-name = "Daring Fireball"
-url = "https://daringfireball.net/feeds/main"
-
-[[feeds]]
-position = 4
-name = "Ars Technica"
-url = "https://feeds.arstechnica.com/arstechnica/index"
-
-[[feeds]]
-position = 5
-name = "The Register"
-url = "https://www.theregister.com/headlines.atom"
-
-[[feeds]]
-position = 6
 name = "MacRumors"
 url = "https://feeds.macrumors.com/MacRumors-All"
 
 [[feeds]]
-position = 7
+position = 4
 name = "The Verge"
 url = "https://www.theverge.com/rss/index.xml"
+
+[[feeds]]
+position = 5
+name = "Ars Technica"
+url = "https://feeds.arstechnica.com/arstechnica/index"
+
+[[feeds]]
+position = 6
+name = "Daring Fireball"
+url = "https://daringfireball.net/feeds/main"
+
+[[feeds]]
+position = 7
+name = "The Register"
+url = "https://www.theregister.com/headlines.atom"
 
 [[feeds]]
 position = 8

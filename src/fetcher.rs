@@ -107,12 +107,23 @@ impl Fetcher {
                 .map(|t| t.content.clone())
                 .unwrap_or_else(|| "Untitled".to_string());
 
-            // Get the main link - for HN/Lobste.rs, the actual article is typically the first link
-            let link = entry
-                .links
-                .first()
-                .map(|l| l.href.clone())
-                .unwrap_or_default();
+            // Get the main link. Most feeds use the first entry link, but Daring Fireball
+            // should point to its own post permalink (not the outbound destination link).
+            let link = if feed.url.contains("daringfireball.net") {
+                entry
+                    .links
+                    .iter()
+                    .find(|l| l.href.contains("daringfireball.net"))
+                    .or_else(|| entry.links.first())
+                    .map(|l| l.href.clone())
+                    .unwrap_or_default()
+            } else {
+                entry
+                    .links
+                    .first()
+                    .map(|l| l.href.clone())
+                    .unwrap_or_default()
+            };
 
             if link.is_empty() {
                 warn!("Skipping entry with no link: {}", title);
